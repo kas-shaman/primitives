@@ -1,4 +1,4 @@
 
-namespace prm {
+namespace math {
     void runTests();
 }

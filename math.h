@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace prm
+namespace math
 {
     using scalar = float;
 
