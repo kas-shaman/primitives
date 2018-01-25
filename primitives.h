@@ -1,5 +1,6 @@
 
 // TODO: +=, *=, etc
+// TODO: at(index, index) -> xy
 
 #include <limits>
 #include <algorithm>
@@ -660,6 +661,9 @@ namespace prm
         }
         template <std::size_t X, std::size_t Y, std::size_t Z> vector4f(scalar x, const imp::vector3base<X, Y, Z> &v) {
             _init({x, v[X], v[Y], v[Z]});
+        }
+        template <std::size_t X1, std::size_t Y1, std::size_t X2, std::size_t Y2> vector4f(const imp::vector2base<X1, Y1> &v1, const imp::vector2base<X2, Y2> &v2) {
+            _init({v1[X1], v1[Y1], v2[X2], v2[Y2]});
         }
         template <std::size_t X, std::size_t Y> vector4f(const imp::vector2base<X, Y> &v, scalar z, scalar w) {
             _init({v[X], v[Y], z, w});
