@@ -1,5 +1,7 @@
+#pragma once
 
 // TODO: +=, *=, etc
+// TODO: xOz
 // TODO: at(index, index) -> xy
 
 #include <limits>
@@ -84,9 +86,16 @@ namespace math
             vector2f orthogonalRight() const;
             
             vector2f transformed(const transform2f &trfm, bool likePosition = false) const;
+
+            // TODO: to all
+            vector2f negatedX() const;
             
             bool isNaN() const {
                 return std::isnan((*this)[Tx]) || std::isnan((*this)[Ty]);
+            }
+
+            bool isNearZero() const {
+                return std::abs((*this)[Tx]) < std::numeric_limits<scalar>::epsilon() && std::abs((*this)[Ty]) < std::numeric_limits<scalar>::epsilon();
             }
             
             scalar &operator [](std::size_t index) {
@@ -162,13 +171,24 @@ namespace math
             vector3f randomOrthogonal() const;
             vector3f randomAberrant(scalar radians) const;
             
+            vector3f rotated(const vector3f &axis, scalar radians) const;
             vector3f transformed(const transform3f &trfm, bool likePosition = false) const;
             vector3f transformed(const quaternion &q) const;
+
+            // TODO: to all
+            vector3f negatedX() const;
             
             quaternion rotationTo(const vector3f &v);
 
             bool isNaN() const {
                 return std::isnan((*this)[Tx]) || std::isnan((*this)[Ty]) || std::isnan((*this)[Tz]);
+            }
+
+            bool isNearZero() const {
+                return 
+                    std::abs((*this)[Tx]) < std::numeric_limits<scalar>::epsilon() && 
+                    std::abs((*this)[Ty]) < std::numeric_limits<scalar>::epsilon() &&
+                    std::abs((*this)[Tz]) < std::numeric_limits<scalar>::epsilon();
             }
             
             scalar &operator [](std::size_t index) {
@@ -195,7 +215,7 @@ namespace math
                 scalar x, y;
             };
             struct {
-                scalar m[2];
+                scalar flat[2];
             };
             struct : imp::vector2base<1, 0> {
                 using vector2base::vector2base;
@@ -231,7 +251,6 @@ namespace math
             y = v[Y];
         }
     };
-
     
     struct vector3f : imp::vector3base<0, 1, 2> {
         union {
@@ -239,7 +258,7 @@ namespace math
                 scalar x, y, z;
             };
             struct {
-                scalar m[3];
+                scalar flat[3];
             };
             struct : imp::vector2base<0, 0> {
                 using vector2base::vector2base;
@@ -327,7 +346,7 @@ namespace math
                 scalar x, y, z, w;
             };
             struct {
-                scalar m[4];
+                scalar flat[4];
             };
             struct : imp::vector2base<0, 0> {
                 using vector2base::vector2base;
@@ -676,7 +695,7 @@ namespace math
         }
 
         vector4f &operator =(const vector4f &v) {
-            _init(v.m);
+            _init(v.flat);
             return *this;
         }
         vector4f &operator =(scalar s) {
@@ -692,6 +711,14 @@ namespace math
         bool isNaN() const {
             return std::isnan(x) || std::isnan(y) || std::isnan(z) || std::isnan(w);
         }
+
+        bool isNearZero() const {
+            return
+                std::abs(x) < std::numeric_limits<scalar>::epsilon() &&
+                std::abs(y) < std::numeric_limits<scalar>::epsilon() &&
+                std::abs(z) < std::numeric_limits<scalar>::epsilon() &&
+                std::abs(w) < std::numeric_limits<scalar>::epsilon();
+        }
     
         scalar &operator [](std::size_t index) {
             return *(reinterpret_cast<scalar *>(this) + index);
@@ -702,10 +729,10 @@ namespace math
 
     private:
         void _init(const scalar (&r)[4]) {
-            m[0] = r[0];
-            m[1] = r[1];
-            m[2] = r[2];
-            m[3] = r[3];
+            flat[0] = r[0];
+            flat[1] = r[1];
+            flat[2] = r[2];
+            flat[3] = r[3];
         }
     };
 
@@ -795,6 +822,9 @@ namespace math
                 scalar _11, _12, _13;
                 scalar _21, _22, _23;
                 scalar _31, _32, _33;
+            };
+            struct {
+                scalar flat[9];
             };
             struct {
                 vector3f &operator [](std::size_t index) {
@@ -929,6 +959,9 @@ namespace math
                 scalar _21, _22, _23, _24;
                 scalar _31, _32, _33, _34;
                 scalar _41, _42, _43, _44;
+            };
+            struct {
+                scalar flat[16];
             };
             struct {
                 vector4f &operator [](std::size_t index) {
@@ -1077,6 +1110,16 @@ namespace math
                 ((*this)[0][2] * d34 + (*this)[2][2] * d41 + (*this)[3][2] * d13) * invd,
                 -((*this)[0][2] * d24 + (*this)[1][2] * d41 + (*this)[3][2] * d12) * invd,
                 ((*this)[0][2] * d23 - (*this)[1][2] * d13 + (*this)[2][2] * d12) * invd,
+            };
+        }
+
+        // TODO: same methods for all
+        transform3f withoutTranslation() const {
+            return {
+                _11, _12, _13, _14,
+                _21, _22, _23, _24,
+                _31, _32, _33, _34,
+                0, 0, 0, _44,
             };
         }
         
@@ -1261,7 +1304,7 @@ namespace math
         }
     
         template <std::size_t Tx, std::size_t Ty> inline scalar vector2base<Tx, Ty>::angleTo(const vector2f &v) const {
-            return std::acos(dot(v) / sqrtf(lengthSq() * v.lengthSq()));
+            return std::acos(std::min(scalar(1.0), std::max(scalar(-1.0), dot(v) / sqrtf(lengthSq() * v.lengthSq()))));
         }
         
         template <std::size_t Tx, std::size_t Ty> inline vector2f vector2base<Tx, Ty>::sign() const {
@@ -1371,6 +1414,11 @@ namespace math
                 (*this)[Tx] * trfm._12 + (*this)[Ty] * trfm._22 + w * trfm._32,
             };
         }
+
+        template <std::size_t Tx, std::size_t Ty>
+        inline vector2f vector2base<Tx, Ty>::negatedX() const {
+            return {-(*this)[Tx], (*this)[Ty]};
+        }
         
         //----------------------------------------------------------------------------------------------------------------------------------------------------------
         // vector3f methods
@@ -1453,11 +1501,11 @@ namespace math
         }
 
         template <std::size_t Tx, std::size_t Ty, std::size_t Tz> inline vector3f vector3base<Tx, Ty, Tz>::cross(const vector3f &v) const {
-            return {
+            return vector3f {
                 (*this)[Ty] * v.z - (*this)[Tz] * v.y,
                 (*this)[Tz] * v.x - (*this)[Tx] * v.z,
                 (*this)[Tx] * v.y - (*this)[Ty] * v.x,
-            };
+            }.normalized();
         }
         
         template <std::size_t Tx, std::size_t Ty, std::size_t Tz> inline vector3f vector3base<Tx, Ty, Tz>::sign() const {
@@ -1565,6 +1613,12 @@ namespace math
         }
     
         template <std::size_t Tx, std::size_t Ty, std::size_t Tz>
+        inline vector3f vector3base<Tx, Ty, Tz>::rotated(const vector3f &axis, scalar radians) const {
+            quaternion rotation(axis, radians);
+            return this->transformed(rotation);
+        }
+
+        template <std::size_t Tx, std::size_t Ty, std::size_t Tz>
         inline vector3f vector3base<Tx, Ty, Tz>::transformed(const transform3f &trfm, bool likePosition) const {
             scalar w = likePosition ? scalar(1.0) : scalar(0.0);
             scalar tx = (*this)[Tx];
@@ -1585,6 +1639,11 @@ namespace math
 
             p = invq * p * q;
             return {p.x, p.y, p.z};
+        }
+
+        template <std::size_t Tx, std::size_t Ty, std::size_t Tz>
+        inline vector3f vector3base<Tx, Ty, Tz>::negatedX() const {
+            return {-(*this)[Tx], (*this)[Ty], (*this)[Tz]};
         }
     
         template <std::size_t Tx, std::size_t Ty, std::size_t Tz> inline quaternion vector3base<Tx, Ty, Tz>::rotationTo(const vector3f &v) {
