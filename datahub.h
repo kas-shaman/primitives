@@ -10,9 +10,10 @@
     #define strcasecmp _stricmp
 #endif
 
-#define datahubscope(name, ...) extern struct name : datahub::details::MovableBase __VA_ARGS__ name;
+#define datahubscope(name, ...) struct name : datahub::details::MovableBase __VA_ARGS__ name;
 #define datahubarray(structname, arrayname, ...) struct structname : datahub::details::MovableBase __VA_ARGS__; datahub::details::ObservableArray<structname> arrayname;
-#define datahubvalue(name, defaultvalue) datahub::details::ObservableValue<decltype(defaultvalue)> name = defaultvalue;
+#define datahubvalue(name, ...) datahub::details::ObservableValue<decltype(__VA_ARGS__)> name = __VA_ARGS__;
+#define datahubevent(name, ...) datahub::details::EventHandler<__VA_ARGS__> name;
 
 namespace datahub {
     namespace details {
@@ -35,49 +36,47 @@ namespace datahub {
     typedef struct {} * EventToken;
     typedef struct {} * ArrayToken;
 
-    template<typename> class EventHandler final : details::MovableBase {};
-    template<typename... Args> class EventHandler<void(Args...)> final : details::MovableBase {
-        template<typename> friend class details::ObservableArray;
-        template<typename, typename> friend class details::ObservableValue;
-
-    public:
-        template<typename L, void(L::*)(Args...) const = &L::operator()> EventToken operator+=(L &&lambda) {
-            EventToken token = reinterpret_cast<EventToken>(_handlers.size());
-            return _handlers.emplace_back(_handlers.size(), std::move(lambda)), token;
-        }
-        void operator-=(EventToken id) {
-            _handlers.erase(std::remove_if(std::begin(_handlers), std::end(_handlers), [id](const auto &item) {
-                return item.first == reinterpret_cast<std::size_t>(id);
-            }), std::end(_handlers));
-        }
-        
-    private:
-        template <typename... CallArgs> void _call(CallArgs&&... args) {
-            for (const auto &handler : _handlers) {
-                handler.second(std::forward<CallArgs>(args)...);
-            }
-        }
-
-    private:
-        std::vector<std::pair<std::size_t, std::function<void(Args...)>>> _handlers;
-    };
-
     namespace details {
+        template<typename> class EventHandler final : details::MovableBase {};
+        template<typename... Args> class EventHandler<void(Args...)> final : details::MovableBase {
+            template<typename> friend class details::ObservableArray;
+            template<typename, typename> friend class details::ObservableValue;
+
+        public:
+            template<typename L, void(L::*)(Args...) const = &L::operator()> EventToken operator+=(L &&lambda) {
+                EventToken token = reinterpret_cast<EventToken>(_handlers.size());
+                return _handlers.emplace_back(_handlers.size(), std::move(lambda)), token;
+            }
+            void operator-=(EventToken id) {
+                _handlers.erase(std::remove_if(std::begin(_handlers), std::end(_handlers), [id](const auto &item) {
+                    return item.first == reinterpret_cast<std::size_t>(id);
+                }), std::end(_handlers));
+            }
+            template <typename... CallArgs> void call(CallArgs&&... args) {
+                for (const auto &handler : _handlers) {
+                    handler.second(std::forward<CallArgs>(args)...);
+                }
+            }
+
+        private:
+            std::vector<std::pair<std::size_t, std::function<void(Args...)>>> _handlers;
+        };
+
         template<typename Derived> class ObservableArray final : MovableBase {
         public:
             EventHandler<void(ArrayToken, Derived &)> onArrayElementAdded;
             EventHandler<void(ArrayToken)> onArrayElementRemoving;
             
-            template<typename L, void(L::*)(Derived &) const = &L::operator()> ArrayToken addArrayElement(L &&initializer) {
+            template<typename L, void(L::*)(Derived &) const = &L::operator()> ArrayToken add(L &&initializer) {
                 ArrayToken result = reinterpret_cast<ArrayToken>(_uniqueid++);
                 typename std::unordered_map<ArrayToken, Derived>::iterator position = _data.emplace(result, Derived{}).first;
                 initializer(position->second);
-                onArrayElementAdded._call(result, position->second);
+                onArrayElementAdded.call(result, position->second);
                 return result;
             }
             
-            void removeArrayElement(ArrayToken id) {
-                onArrayElementRemoving._call(id);
+            void remove(ArrayToken id) {
+                onArrayElementRemoving.call(id);
                 _data.erase(id);
             }
             
@@ -85,26 +84,56 @@ namespace datahub {
                 return _data[id];
             }
 
+            template<typename L, void(L::*)(ArrayToken, Derived &) const = &L::operator()> void foreach(L &&functor) {
+                for (auto it = _data.begin(); it != _data.end(); ++it) {
+                    functor(it->first, it->second);
+                }
+            }
+
         private:
             std::unordered_map<ArrayToken, Derived> _data;
-            std::size_t _uniqueid = 0;
+            std::size_t _uniqueid = 0x1;
         };
 
         template<typename Type, typename = void> class ObservableValue : MovableBase {};
-        template<typename Type> class ObservableValue<Type, std::enable_if_t<std::is_arithmetic<Type>::value>> : MovableBase {
+        template<typename Type> class ObservableValue<Type, std::enable_if_t<std::is_class<Type>::value || std::is_pointer<Type>::value>> : MovableBase {
         public:
             EventHandler<void(const Type &)> onValueChanged;
+
+            template<typename AssignType> ObservableValue(AssignType&& value) {
+                _data = std::forward<AssignType>(value);
+            }
+            template<typename AssignType> void operator =(AssignType&& value) {
+                _data = std::forward<AssignType>(value);
+                onValueChanged.call(_data);
+            }
+            operator Type &() {
+                return _data;
+            }
+            operator const Type &() const {
+                return _data;
+            }
+            bool operator ==(const Type &other) {
+                return _data == other;
+            }
+
+        private:
+            Type _data;
+        };
+        template<typename Type> class ObservableValue<Type, std::enable_if_t<std::is_arithmetic<Type>::value>> : MovableBase {
+        public:
+            EventHandler<void(Type)> onValueChanged;
         
-            template<typename AssignType, typename = std::enable_if_t<std::is_arithmetic<AssignType>::value>> ObservableValue(AssignType&& value) {
+            template<typename AssignType, typename = std::enable_if_t<std::is_arithmetic<AssignType>::value>> ObservableValue(AssignType value) {
                 _data = static_cast<long double>(value);
             }
-            template<typename AssignType> auto operator =(AssignType&& value) -> typename std::enable_if<std::is_arithmetic<AssignType>::value, void>::type {
+            template<typename AssignType> auto operator =(AssignType value) -> typename std::enable_if<std::is_arithmetic<AssignType>::value, void>::type {
                 _data = static_cast<long double>(value);
-                onValueChanged._call(static_cast<Type>(_data));
+                onValueChanged.call(static_cast<Type>(_data));
             }
             void operator =(const char *string) {
                 _data = static_cast<long double>(std::strtold(string, nullptr));
-                onValueChanged._call(static_cast<Type>(_data));
+                onValueChanged.call(static_cast<Type>(_data));
             }
             operator const char *() const {
                 thread_local static char buffer[32];
@@ -114,7 +143,7 @@ namespace datahub {
             template <typename T, typename = std::enable_if_t<std::is_arithmetic<T>::value>> operator T() const {
                 return static_cast<T>(_data);
             }
-            template<typename AssignType> auto operator ==(AssignType&& value) -> typename std::enable_if<std::is_arithmetic<AssignType>::value, bool>::type {
+            template<typename AssignType> auto operator ==(AssignType value) -> typename std::enable_if<std::is_arithmetic<AssignType>::value, bool>::type {
                 return std::abs(static_cast<long double>(value) - _data) < std::numeric_limits<long double>::epsilon();
             }
             bool operator ==(const char *string) {
@@ -129,19 +158,19 @@ namespace datahub {
             EventHandler<void(const char *)> onValueChanged;
             ObservableValue(const char *string) : _data(string) {}
 
-            template<typename AssignType> auto operator =(AssignType&& value) -> typename std::enable_if<std::is_arithmetic<AssignType>::value, void>::type {
+            template<typename AssignType> auto operator =(AssignType value) -> typename std::enable_if<std::is_arithmetic<AssignType>::value, void>::type {
                 thread_local static char buffer[32];
                 ::snprintf(buffer, 32, "%g", static_cast<double>(value));
                 _data = buffer;
-                onValueChanged._call(_data.c_str());
+                onValueChanged.call(_data.c_str());
             }
             void operator =(const char *string) {
                 _data = string;
-                onValueChanged._call(_data.c_str());
+                onValueChanged.call(_data.c_str());
             }
             void operator =(bool value) {
                 _data = value ? "true" : "false";
-                onValueChanged._call(_data.c_str());
+                onValueChanged.call(_data.c_str());
             }
             operator const char *() const {
                 return _data.c_str();
@@ -195,6 +224,7 @@ namespace datahub {
     // unittest scope
     // -----------------------------------------------------------------------------------------------------------------------------------------------
 
+    extern
     datahubscope(unittest, {
         datahubvalue(teststring, "unittest")
         datahubvalue(testvalue, 99)
