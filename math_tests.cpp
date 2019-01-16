@@ -2,8 +2,8 @@
 #include <cassert>
 #include <limits>
 
-#include "primitives.h"
-#include "primitives_tests.h"
+#include "math.h"
+#include "math_tests.h"
 
 #define REQUIRE(x) assert(x)
 

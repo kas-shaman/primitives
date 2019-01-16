@@ -130,6 +130,11 @@ namespace math
                 _init({s, s, s});
                 return *this;
             }
+            // TODO: same for vector2base
+            vector3base &operator =(const scalar (&v)[3]) {
+                _init(v);
+                return *this;
+            }
             operator vector3f();
             
             scalar distanceTo(const vector3f &v) const;
@@ -215,7 +220,7 @@ namespace math
                 scalar x, y;
             };
             struct {
-                scalar flat[2];
+                scalar flat2[2];
             };
             struct : imp::vector2base<1, 0> {
                 using vector2base::vector2base;
@@ -258,7 +263,10 @@ namespace math
                 scalar x, y, z;
             };
             struct {
-                scalar flat[3];
+                scalar flat2[2];
+            };
+            struct {
+                scalar flat3[3];
             };
             struct : imp::vector2base<0, 0> {
                 using vector2base::vector2base;
@@ -328,6 +336,7 @@ namespace math
         vector3f() = default;
         explicit constexpr vector3f(scalar s) : x(s), y(s), z(s) {}
         constexpr vector3f(scalar x, scalar y, scalar z) : x(x), y(y), z(z) {}
+        constexpr vector3f(const scalar (&v)[3]) : x(v[0]), y(v[1]), z(v[2]) {}
         
         template <std::size_t X, std::size_t Y, std::size_t Z> vector3f(const imp::vector3base<X, Y, Z> &v) {
             _init({v[X], v[Y], v[Z]});
@@ -346,7 +355,13 @@ namespace math
                 scalar x, y, z, w;
             };
             struct {
-                scalar flat[4];
+                scalar flat2[2];
+            };
+            struct {
+                scalar flat3[3];
+            };
+            struct {
+                scalar flat4[4];
             };
             struct : imp::vector2base<0, 0> {
                 using vector2base::vector2base;
@@ -674,6 +689,7 @@ namespace math
         explicit constexpr vector4f(scalar s) : x(s), y(s), z(s), w(s) {}
         constexpr vector4f(scalar x, scalar y, scalar z, scalar w) : x(x), y(y), z(z), w(w) {}
         constexpr vector4f(const vector4f &v) : x(v.x), y(v.y), z(v.z), w(v.w) {}
+        constexpr vector4f(const scalar (&v)[4]) : x(v[0]), y(v[1]), z(v[2]), w(v[3]) {}
         
         template <std::size_t X, std::size_t Y, std::size_t Z> vector4f(const imp::vector3base<X, Y, Z> &v, scalar w) {
             _init({v[X], v[Y], v[Z], w});
@@ -694,8 +710,12 @@ namespace math
             _init({x, y, v[X], v[Y]});
         }
 
+        vector4f &operator =(const scalar (&v)[4]) {
+            _init(v);
+            return *this;
+        }
         vector4f &operator =(const vector4f &v) {
-            _init(v.flat);
+            _init(v.flat4);
             return *this;
         }
         vector4f &operator =(scalar s) {
@@ -729,10 +749,10 @@ namespace math
 
     private:
         void _init(const scalar (&r)[4]) {
-            flat[0] = r[0];
-            flat[1] = r[1];
-            flat[2] = r[2];
-            flat[3] = r[3];
+            flat4[0] = r[0];
+            flat4[1] = r[1];
+            flat4[2] = r[2];
+            flat4[3] = r[3];
         }
     };
 
@@ -824,7 +844,7 @@ namespace math
                 scalar _31, _32, _33;
             };
             struct {
-                scalar flat[9];
+                scalar flat9[9];
             };
             struct {
                 vector3f &operator [](std::size_t index) {
@@ -961,7 +981,7 @@ namespace math
                 scalar _41, _42, _43, _44;
             };
             struct {
-                scalar flat[16];
+                scalar flat16[16];
             };
             struct {
                 vector4f &operator [](std::size_t index) {
@@ -1206,6 +1226,7 @@ namespace math
         float r, g, b, a;
         
         color() = default;
+        constexpr color(unsigned rgba) : r(float(rgba & 255) / 255.0f), g(float((rgba >> 8) & 255) / 255.0f), b(float((rgba >> 16) & 255) / 255.0f), a(float((rgba >> 24) & 255) / 255.0f) {}
         constexpr color(scalar r, scalar g, scalar b, scalar a) : r(r), g(g), b(b), a(a) {}
         
         static constexpr color identity() {
@@ -1217,6 +1238,10 @@ namespace math
                    (unsigned(g * 255.0f) & 255) << 8 |
                    (unsigned(b * 255.0f) & 255) << 16 |
                    (unsigned(a * 255.0f) & 255) << 24;
+        }
+        
+        operator vector4f() const {
+            return {r, g, b, a};
         }
     };
 
